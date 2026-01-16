@@ -58,19 +58,49 @@ bot.start((ctx) => {
 // Inline mode handler
 bot.on('inline_query', async (ctx) => {
   const q = ctx.inlineQuery?.query || '';
+  console.log('inline_query', { q, from: ctx.from?.id });
   const items = searchAudios(q, 25);
-  const results = items.map((a, idx) => ({
-    type: 'audio',
-    id: `${a.id || idx}`,
-    audio_url: a.url,
-    title: a.title,
-    performer: a.performer || undefined,
-    caption: a.caption || undefined,
-  }));
+  const results = items
+    .map((a, idx) => {
+      const id = `${a.id || a.file_unique_id || idx}`;
+      // Voice (cached)
+      if (a.tg_type === 'voice' || a.is_voice === true || a.voice_file_id) {
+        const voiceId = a.voice_file_id || a.file_id;
+        if (!voiceId) return null;
+        return {
+          type: 'voice',
+          id,
+          voice_file_id: voiceId,
+          title: a.title || 'Voice',
+        };
+      }
+      // Audio (cached)
+      if (a.file_id) {
+        return {
+          type: 'audio',
+          id,
+          audio_file_id: a.file_id,
+          caption: a.caption || undefined,
+        };
+      }
+      // Audio by URL
+      if (a.url) {
+        return {
+          type: 'audio',
+          id,
+          audio_url: a.url,
+          title: a.title || 'Audio',
+          performer: a.performer || undefined,
+          caption: a.caption || undefined,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
 
   try {
     await ctx.answerInlineQuery(results, {
-      cache_time: 5, // small cache while iterating
+      cache_time: 0, // disable cache for debugging
       is_personal: true,
     });
   } catch (err) {
@@ -106,7 +136,9 @@ async function main() {
     app.use(express.json());
     app.use(bot.webhookCallback(WEBHOOK_PATH));
 
-    await bot.telegram.setWebhook(webhookUrl);
+    await bot.telegram.setWebhook(webhookUrl, {
+      allowed_updates: ['inline_query', 'chosen_inline_result', 'message'],
+    });
     console.log('Webhook set to', webhookUrl);
 
     app.listen(PORT, () => {

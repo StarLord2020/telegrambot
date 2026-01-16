@@ -72,6 +72,17 @@ BOT_TOKEN=123:ABC USE_POLLING=true npm run dev
 
   Примечание: записи с `file_id` не требуют `url` — бот отправляет кэшированное аудио Telegram.
 
+  Для голосовых сообщений используйте кэшированный `voice`:
+  ```json
+  {
+    "id": "voice-1",
+    "title": "Голосовая заметка",
+    "tg_type": "voice",
+    "file_id": "<voice_file_id>"
+  }
+  ```
+  Здесь `title` обязателен (требование Telegram для inline voice). Если это обычный аудиофайл, оставляйте без `tg_type`.
+
 ## Получить chat_id
 - Команда: отправьте `/id` боту (в ЛС или в группе) — бот ответит `chat_id` и `user_id`.
 - Deep‑link: откройте `https://t.me/<имя_бота>?start=id` и нажмите Start — бот пришлёт `chat_id` в ЛС.
