@@ -55,6 +55,15 @@ bot.start((ctx) => {
   );
 });
 
+bot.command(['id','myid'], async (ctx) => {
+  const chatId = ctx.chat?.id;
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username ? ` (@${ctx.from.username})` : '';
+  try {
+    await ctx.reply(`chat_id: ${chatId}\nuser_id: ${userId}${username}`);
+  } catch {}
+});
+
 // Inline mode handler
 bot.on('inline_query', async (ctx) => {
   const q = ctx.inlineQuery?.query || '';
@@ -72,6 +81,19 @@ bot.on('inline_query', async (ctx) => {
           id,
           voice_file_id: voiceId,
           title: a.title || 'Voice',
+        };
+      }
+      // Document (cached)
+      if (a.tg_type === 'document' || a.document_file_id) {
+        const docId = a.document_file_id || a.file_id;
+        if (!docId) return null;
+        return {
+          type: 'document',
+          id,
+          document_file_id: docId,
+          title: a.title || 'Document',
+          caption: a.caption || undefined,
+          description: a.description || undefined,
         };
       }
       // Audio (cached)
