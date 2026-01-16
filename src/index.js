@@ -96,8 +96,8 @@ bot.on('inline_query', async (ctx) => {
           description: a.description || undefined,
         };
       }
-      // Audio (cached)
-      if (a.file_id) {
+      // Audio (cached) — include only if explicitly marked
+      if (a.file_id && (a.tg_type === 'audio')) {
         return {
           type: 'audio',
           id,
@@ -138,6 +138,63 @@ bot.on('chosen_inline_result', (ctx) => {
     result_id: r.result_id,
     from: r.from?.username || r.from?.id,
   });
+});
+
+// Probe command: try sending a library item by id/index
+bot.command('probe', async (ctx) => {
+  const text = ctx.message?.text || '';
+  const args = text.split(/\s+/).slice(1);
+  const key = args.join(' ').trim();
+  if (!key) {
+    return ctx.reply('Использование: /probe <id или индекс в списке>');
+  }
+
+  let item = audioLibrary.find((a) => a.id === key);
+  if (!item) {
+    const n = Number(key);
+    if (!Number.isNaN(n) && n >= 0 && n < audioLibrary.length) {
+      item = audioLibrary[n];
+    }
+  }
+  if (!item) {
+    return ctx.reply('Не нашёл элемент. Проверьте id или индекс.');
+  }
+
+  const chatId = ctx.chat?.id;
+  const errors = {};
+  try {
+    if (item.url) {
+      await ctx.telegram.sendAudio(chatId, item.url, {
+        caption: item.caption,
+        title: item.title,
+        performer: item.performer,
+      });
+      return;
+    }
+    if (item.file_id) {
+      try {
+        await ctx.telegram.sendAudio(chatId, item.file_id, { caption: item.caption });
+        return;
+      } catch (e) {
+        errors.audio = String(e?.description || e?.message || e);
+      }
+      try {
+        await ctx.telegram.sendVoice(chatId, item.file_id, { caption: item.caption });
+        return;
+      } catch (e) {
+        errors.voice = String(e?.description || e?.message || e);
+      }
+      try {
+        await ctx.telegram.sendDocument(chatId, item.file_id, { caption: item.caption });
+        return;
+      } catch (e) {
+        errors.document = String(e?.description || e?.message || e);
+      }
+    }
+    await ctx.reply('Не получилось отправить. ' + JSON.stringify(errors));
+  } catch (e) {
+    await ctx.reply('Ошибка: ' + (e?.description || e?.message || String(e)));
+  }
 });
 
 // Health endpoint
