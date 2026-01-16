@@ -40,71 +40,33 @@ function searchAudios(query, limit = 25) {
   const q = normalize(query);
   if (!q) return audioLibrary.slice(0, limit);
   const results = audioLibrary.filter((a) => {
-    const hay = `${a.title || ''} ${a.performer || ''}`;
+    const hay = `${a.title} ${a.performer || ''}`;
     return normalize(hay).includes(q);
   });
   return results.slice(0, limit);
 }
 
-// no debug storage
-
 // Commands
-function formatIds(ctx) {
-  const chat = ctx.chat;
-  const from = ctx.from;
-  const parts = [];
-  if (chat) parts.push(`chat_id: ${chat.id} (${chat.type})`);
-  if (from) parts.push(`user_id: ${from.id}${from.username ? ` (@${from.username})` : ''}`);
-  return parts.join('\n');
-}
-
-async function replyWithIds(ctx) {
-  try {
-    await ctx.reply(formatIds(ctx));
-  } catch {}
-}
-
 bot.start((ctx) => {
-  const payload = ctx.startPayload || '';
-  if (payload.toLowerCase() === 'id' || payload.toLowerCase() === 'getid') {
-    return replyWithIds(ctx);
-  }
   return ctx.reply(
-    'Привет! Я инлайн-бот для отправки аудио.\n' +
+      'Привет! Я инлайн-бот для отправки аудио.\n' +
       'Напиши в любом чате: @имя_бота запрос\n' +
-      'и выбери трек из списка.\n' +
-      'Команда /id — показать chat_id.'
+      'и выбери трек из списка.'
   );
 });
-
-bot.command('id', replyWithIds);
-bot.command('myid', replyWithIds);
 
 // Inline mode handler
 bot.on('inline_query', async (ctx) => {
   const q = ctx.inlineQuery?.query || '';
   const items = searchAudios(q, 25);
-  const results = items.map((a, idx) => {
-    const id = `${a.id || a.file_unique_id || idx}`;
-    if (a.file_id) {
-      // Use Telegram-cached audio
-      return {
-        type: 'audio',
-        id,
-        audio_file_id: a.file_id,
-        caption: a.caption || undefined,
-      };
-    }
-    // Use external URL
-    return {
-      type: 'audio',
-      id,
-      audio_url: a.url,
-      title: a.title || 'Audio',
-      performer: a.performer || undefined,
-      caption: a.caption || undefined,
-    };
-  });
+  const results = items.map((a, idx) => ({
+    type: 'audio',
+    id: `${a.id || idx}`,
+    audio_url: a.url,
+    title: a.title,
+    performer: a.performer || undefined,
+    caption: a.caption || undefined,
+  }));
 
   try {
     await ctx.answerInlineQuery(results, {
@@ -126,79 +88,12 @@ bot.on('chosen_inline_result', (ctx) => {
   });
 });
 
-// When you send an audio to the bot in DM, reply with a ready JSON
-bot.on('message', async (ctx) => {
-  if (ctx.chat?.type !== 'private') return; // only DM
-  const m = ctx.message;
-
-  // Prefer audio
-  if (m.audio) {
-    const audio = m.audio;
-    const entry = {
-      id: audio.file_unique_id || crypto.randomUUID(),
-      title: audio.title || (m.caption || 'Audio'),
-      performer: audio.performer || undefined,
-      file_id: audio.file_id,
-      caption: m.caption || undefined,
-    };
-    console.log('Add this to data/audios.json:', entry);
-    try {
-      await ctx.reply(
-        [
-          'Нашёл аудио. Добавьте в data/audios.json и задеплойте:',
-          JSON.stringify(entry, null, 2),
-        ].join('\n')
-      );
-    } catch {}
-    return;
-  }
-
-  // Also support document that looks like audio
-  if (m.document && (m.document.mime_type?.startsWith('audio/') || /\.(mp3|m4a|ogg|flac|wav)$/i.test(m.document.file_name || ''))) {
-    const d = m.document;
-    const baseTitle = (d.file_name || 'Audio').replace(/\.[^.]+$/, '');
-    const entry = {
-      id: d.file_unique_id || crypto.randomUUID(),
-      title: baseTitle,
-      file_id: d.file_id,
-      caption: m.caption || undefined,
-    };
-    console.log('Add this to data/audios.json:', entry);
-    try {
-      await ctx.reply(
-        [
-          'Принял файл как аудио. Добавьте в data/audios.json и задеплойте:',
-          JSON.stringify(entry, null, 2),
-        ].join('\n')
-      );
-    } catch {}
-    return;
-  }
-
-  // If it was a voice message
-  if (m.voice) {
-    try {
-      await ctx.reply('Это голосовое. Пожалуйста, отправьте аудио как «Музыка» или файл (mp3/m4a/ogg).');
-    } catch {}
-    return;
-  }
-});
-
-// no debug endpoints
-
 // Health endpoint
 app.get('/', (_req, res) => {
   res.json({ ok: true, mode: USE_POLLING ? 'polling' : 'webhook' });
 });
 
 async function main() {
-  // Log deep-link to get chat id
-  try {
-    const me = await bot.telegram.getMe();
-    if (me?.username) {
-      console.log(`Chat ID link: https://t.me/${me.username}?start=id`);
-    }
-  } catch {}
   if (USE_POLLING) {
     await bot.launch();
     app.listen(PORT, () => console.log(`Health on http://localhost:${PORT}`));
